@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import pandas as pd
 import streamlit as st
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -6,15 +7,23 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 st.set_page_config(page_title="CineScope | Movie Recommender", page_icon="🎬", layout="wide")
 
-BASE_DIR = os.path.dirname(__file__)
-DATA_PATH = os.path.join(BASE_DIR, "cleaned_data1.csv")
+BASE_DIR = Path(__file__).resolve().parent
+DATA_PATH = BASE_DIR / "cleaned_data1.csv"
 
 
 @st.cache_data(show_spinner=False)
 def load_data():
-    if not os.path.exists(DATA_PATH):
-        raise FileNotFoundError(f"Movie data not found at {DATA_PATH}")
-    return pd.read_csv(DATA_PATH)
+    candidate_paths = [DATA_PATH, Path.cwd() / "cleaned_data1.csv"]
+    for path in candidate_paths:
+        if path.exists():
+            return pd.read_csv(path)
+
+    files_list = sorted(Path.cwd().glob("*"))
+    raise FileNotFoundError(
+        "Movie data not found. Tried these paths: "
+        f"{', '.join(str(p) for p in candidate_paths)}. "
+        f"Current directory contains: {', '.join(p.name for p in files_list)}"
+    )
 
 
 def normalize_title(title: str) -> str:
@@ -430,3 +439,4 @@ with st.container():
         """,
         unsafe_allow_html=True,
     )
+    
