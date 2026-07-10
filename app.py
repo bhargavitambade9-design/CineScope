@@ -4,6 +4,8 @@ import pandas as pd
 import streamlit as st
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+from scipy.sparse import issparse
 
 st.set_page_config(page_title="CineScope | Movie Recommender", page_icon="🎬", layout="wide")
 
@@ -32,9 +34,12 @@ def normalize_title(title: str) -> str:
 
 @st.cache_resource(show_spinner=False)
 def build_similarity_matrix(movies_df):
-    tfidf = TfidfVectorizer(stop_words="english")
-    vector = tfidf.fit_transform(movies_df["tags"]).toarray()
-    return cosine_similarity(vector)
+    # Keep the TF-IDF matrix sparse to avoid huge memory use
+    tfidf = TfidfVectorizer(stop_words="english", dtype=np.float32)
+    tfidf_matrix = tfidf.fit_transform(movies_df["tags"])
+    # Compute pairwise cosine similarity. Request a sparse output when possible
+    # to avoid converting the high-dimensional TF-IDF matrix to dense.
+    return cosine_similarity(tfidf_matrix, dense_output=False)
 
 
 def get_index_from_name(movie_name: str, movies_df):
@@ -50,7 +55,15 @@ def get_recommendations(movie_name: str, movies_df, similarity_matrix, top_n: in
     if index is None:
         return []
 
-    similarity_scores = sorted(enumerate(similarity_matrix[index]), key=lambda item: item[1], reverse=True)
+    # similarity_matrix[index] may be a sparse row; convert to a 1-D array safely
+    row = similarity_matrix[index]
+    if issparse(row):
+        scores = row.toarray().ravel()
+    else:
+        # already dense or a 1D array-like
+        scores = row
+
+    similarity_scores = sorted(enumerate(scores), key=lambda item: item[1], reverse=True)
 
     recommendations = []
     for movie_idx, score in similarity_scores[1 : top_n + 1]:
@@ -439,4 +452,3 @@ with st.container():
         """,
         unsafe_allow_html=True,
     )
-    
